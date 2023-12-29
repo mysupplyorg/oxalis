@@ -22,6 +22,7 @@
 
 package network.oxalis.commons.persist;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
 import com.google.inject.Inject;
 import com.google.inject.name.Named;
@@ -44,6 +45,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
 
 /**
  * @author erlend
@@ -102,17 +104,29 @@ public class DefaultPersister implements PersisterHandler {
             folder = Paths.get(inboundFolder.toString(), as4MetaData.getServer());
         }*/
 
-        Path path = PersisterUtils.createArtifactFolders(folder, inboundMetadata.getHeader()).resolve(
+        Path datPath = PersisterUtils.createArtifactFolders(folder, inboundMetadata.getHeader()).resolve(
                 String.format("%s.receipt.dat",
                         FileUtils.filterString(inboundMetadata.getTransmissionIdentifier().getIdentifier())));
 
-        try (OutputStream outputStream = Files.newOutputStream(path)) {
+        try (OutputStream outputStream = Files.newOutputStream(datPath)) {
             evidenceFactory.write(outputStream, inboundMetadata);
         } catch (EvidenceException e) {
             throw new IOException("Unable to persist receipt.", e);
         }
 
-        log.debug("Receipt persisted to: {}", path);
+        Path jsonPath = PersisterUtils.createArtifactFolders(folder, inboundMetadata.getHeader()).resolve(
+                String.format("%s.receipt.json",
+                        FileUtils.filterString(inboundMetadata.getTransmissionIdentifier().getIdentifier())));
+        try (OutputStream outputStream = Files.newOutputStream(jsonPath)) {
+            HashMap<String, String> map = new HashMap<String, String>();
+            map.put("SenderCertificate", inboundMetadata.getCertificate().getSubjectDN().getName());
+            ObjectMapper objectMapper = new ObjectMapper();
+            objectMapper.writeValue(outputStream, map);
+        } catch (Exception e) {
+            throw new IOException("Unable to persist json.", e);
+        }
+
+        log.debug("Receipt persisted to: {}", datPath);
     }
 
     /**
